@@ -1,5 +1,7 @@
 .App {
   text-align: center;
+  position: fixed;
+  z-index: -1;
 }
 
 .App-logo {
@@ -35,4 +37,31 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+.search {
+  position: fixed;
+  width: 100%;
+  z-index: 1;
+  align-items: center;
+  background-color: transparent;
+}
+
+.search--input {
+  margin: 10px auto;
+  width: 200px;
+  height: 30px;
+  border: 1px solid gray;
+  background: white;
+  border-radius: 10px;
+}
+
+.btn {
+  background-color: #226bff;
+  color: white;
+  border: 1px solid transparent;
+  width: 60px;
+  height: 30px;
+  border-radius: 10px;
+  margin-left: 5px;
 }
