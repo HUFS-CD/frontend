@@ -35,6 +35,7 @@ function App() {
   var marker_pointsArr = [];
 
   // 앱을 켠 순간의 현재 위치 좌표
+  var current_position;
   var lat_s;
   var lon_s;
 
@@ -68,8 +69,8 @@ function App() {
           //Marker 객체 생성.
           const marker_m = new Tmapv2.Marker({
             position: markerPosition, //Marker의 중심좌표 설정.
-            icon: "https://tmapapi.sktelecom.com/upload/tmap/marker/pin_b_m_1.png",
-            iconSize: new Tmapv2.Size(24, 38),
+            icon: "https://cdn2.iconfinder.com/data/icons/wsd-map-markers-2/512/wsd_markers_89-1024.png",
+            iconSize: new Tmapv2.Size(24, 24),
             map: map, //Marker가 표시될 Map 설정.
             title: name, //Marker 타이틀.
             index: i,
@@ -92,8 +93,9 @@ function App() {
         // lon_s = position.coords.longitude;
         lat_s = 37.59644996896789;
         lon_s = 127.06004762649577;
+        current_position = new Tmapv2.LatLng(lat_s, lon_s);
         var marker_s = new Tmapv2.Marker({
-          position: new Tmapv2.LatLng(lat_s, lon_s),
+          position: current_position,
           icon: "http://tmapapi.sktelecom.com/upload/tmap/marker/pin_r_m_s.png",
           iconSize: new Tmapv2.Size(24, 38),
           draggable: true,
@@ -108,6 +110,9 @@ function App() {
 
     map.addListener("click", function onClick(e) {
       removeMarkers();
+      searched = false;
+
+      resetLine();
 
       lat_clicked = e.latLng.lat();
       lon_clicked = e.latLng.lng();
@@ -123,9 +128,10 @@ function App() {
     //------ --------- ------//
 
     //------ 명칭 검색 후 마커 생성 ------//
-
     $("#btn_select").on("click", function () {
       var searchKeyword = $("#searchKeyword").val();
+      resetLine();
+      removeMarkers();
 
       $.ajax({
         method: "GET",
@@ -195,47 +201,12 @@ function App() {
                 map: map,
                 index: i,
               });
+              marker_selectedArr.push(marker_selected);
             });
             markerArr.push(marker2);
 
             positionBounds.extend(markerPosition); // LatLngBounds의 객체 확장
           });
-
-          // for (var k in resultpoisData) {
-          //   var noorLat = Number(resultpoisData[k].noorLat);
-          //   var noorLon = Number(resultpoisData[k].noorLon);
-          //   var name = resultpoisData[k].name;
-
-          //   var pointCng = new Tmapv2.Point(noorLon, noorLat);
-          //   var projectionCng = new Tmapv2.Projection.convertEPSG3857ToWGS84GEO(
-          //     pointCng
-          //   );
-
-          //   var lat = projectionCng._lat;
-          //   var lon = projectionCng._lng;
-
-          //   var markerPosition = new Tmapv2.LatLng(lat, lon);
-
-          //   var marker2 = new Tmapv2.Marker({
-          //     position: markerPosition,
-          //     //icon : "http://tmapapi.sktelecom.com/upload/tmap/marker/pin_b_m_a.png",
-          //     icon:
-          //       "http://tmapapi.sktelecom.com/upload/tmap/marker/pin_b_m_" +
-          //       k +
-          //       ".png",
-          //     iconSize: new Tmapv2.Size(24, 38),
-          //     title: name,
-          //     map: map,
-          //   });
-
-          //   marker2.index = k;
-
-          //   marker2.addListener("click", function onClick() {
-          //     console.log(marker2.index);
-          //   });
-          //   markerArr.push(marker2);
-          //   positionBounds.extend(markerPosition); // LatLngBounds의 객체 확장
-          // }
 
           map.panToBounds(positionBounds); // 확장된 bounds의 중심으로 이동시키기
           map.zoomOut();
@@ -254,7 +225,117 @@ function App() {
         },
       });
     });
-    $("#btn_navigate").on("click", function () {
+    //-------//
+
+    //------ 가까운 파출소 ------//
+    $("#btn_police").on("click", function () {
+      searched = true;
+      resetLine();
+      removeMarkers();
+      $.ajax({
+        method: "GET", // 요청 방식
+        url: "https://apis.openapi.sk.com/tmap/pois/search/around?version=1&format=json&callback=result", // url 주소
+        data: {
+          categories: "파출소",
+          resCoordType: "EPSG3857",
+          searchType: "name",
+          searchtypCd: "A",
+          radius: 1,
+          reqCoordType: "WGS84GEO",
+          centerLon: lon_s,
+          centerLat: lat_s,
+          appKey: "l7xx2eff6322cd2944cab62446d299f7f6e3",
+          count: 20,
+        },
+        success: function (response) {
+          counter++;
+          var resultpoisData = response.searchPoiInfo.pois.poi;
+
+          // 2. 기존 마커, 팝업 제거
+          if (markerArr.length > 0 && counter % 2 === 1) {
+            // 이 counter 변수가 없으면 마커를 표시하는 즉시 삭제해버리는 오류 발생, 임시방편으로 counter 변수를 만들었으나 추후 개선 필요
+            removeSearchMarkers();
+          }
+          var positionBounds = new Tmapv2.LatLngBounds(); //맵에 결과물 확인 하기 위한 LatLngBounds객체 생성
+
+          let minDi = 99999;
+          var finalPosition;
+          var markerPosition;
+          var name;
+          // 3. POI 마커 표시
+          resultpoisData.forEach((e) => {
+            var noorLat = Number(e.noorLat);
+            var noorLon = Number(e.noorLon);
+            name = e.name;
+
+            var pointCng = new Tmapv2.Point(noorLon, noorLat);
+            var projectionCng = new Tmapv2.Projection.convertEPSG3857ToWGS84GEO(
+              pointCng
+            );
+
+            var lat = projectionCng._lat;
+            var lon = projectionCng._lng;
+
+            markerPosition = new Tmapv2.LatLng(lat, lon);
+            var di = current_position.distanceTo(markerPosition);
+
+            if (di < minDi) {
+              minDi = di;
+              finalPosition = markerPosition;
+            }
+          });
+
+          var marker2 = new Tmapv2.Marker({
+            position: markerPosition,
+            //icon : "http://tmapapi.sktelecom.com/upload/tmap/marker/pin_b_m_a.png",
+            icon: "https://cdn2.iconfinder.com/data/icons/wsd-map-markers-2/512/wsd_markers_65-1024.png",
+            iconSize: new Tmapv2.Size(38, 38),
+            map: map,
+          });
+
+          marker2.addListener("click", function onClick() {
+            searched = true;
+            selected_position = marker2.getPosition();
+            removeMarkers();
+            removeSearchMarkers();
+            console.log(selected_position);
+            marker_selected = new Tmapv2.Marker({
+              position: selected_position,
+              //icon : "http://tmapapi.sktelecom.com/upload/tmap/marker/pin_b_m_a.png",
+              icon: "http://tmapapi.sktelecom.com/upload/tmap/marker/pin_r_m_e.png",
+
+              iconSize: new Tmapv2.Size(24, 38),
+              title: name,
+              map: map,
+            });
+            marker_selectedArr.push(marker_selected);
+          });
+          markerArr.push(marker2);
+
+          positionBounds.extend(markerPosition); // LatLngBounds의 객체 확장
+
+          map.panToBounds(positionBounds); // 확장된 bounds의 중심으로 이동시키기
+          map.zoomOut();
+        },
+        error: function (request, status, error) {
+          console.log(
+            "code:" +
+              request.status +
+              "\n" +
+              "message:" +
+              request.responseText +
+              "\n" +
+              "error:" +
+              error
+          );
+        },
+      });
+    });
+
+    //------ 경로 안내 ------//
+    $("#btn_navigate").on("click", navigate);
+
+    function navigate() {
       var the_lat, the_lon;
       if (searched) {
         the_lat = selected_position._lat;
@@ -286,13 +367,14 @@ function App() {
           var tDistance =
             "총 거리 : " +
             (resultData[0].properties.totalDistance / 1000).toFixed(1) +
-            "km,";
+            "km |";
           var tTime =
             " 총 시간 : " +
             (resultData[0].properties.totalTime / 60).toFixed(0) +
             "분";
 
           $("#result").text(tDistance + tTime);
+          console.log(tDistance, tTime);
 
           //기존 그려진 라인 & 마커가 있다면 초기화
           if (resultdrawArr.length > 0 && counter2 % 2 === 1) {
@@ -309,12 +391,12 @@ function App() {
             marker_pointsArr = [];
           }
 
-          if (marker_selectedArr.length > 0) {
-            for (let i in marker_selectedArr) {
-              marker_selectedArr[i].setMap(null);
-            }
-            marker_selectedArr = [];
-          }
+          // if (marker_selectedArr.length > 0 && drawInfoArr.length !== 0) {
+          //   for (let i in marker_selectedArr) {
+          //     marker_selectedArr[i].setMap(null);
+          //   }
+          //   marker_selectedArr = [];
+          // }
 
           drawInfoArr = [];
 
@@ -410,10 +492,6 @@ function App() {
           );
         },
       });
-    });
-    function addComma(num) {
-      var regexp = /\B(?=(\d{3})+(?!\d))/g;
-      return num.toString().replace(regexp, ",");
     }
 
     function drawLine(arrPoint) {
@@ -430,9 +508,13 @@ function App() {
   }, []);
 
   function removeMarkers() {
-    for (var i = 0; i < markers.length; i++) {
+    for (let i = 0; i < markers.length; i++) {
       markers[i].setMap(null);
     }
+    for (let i = 0; i < marker_selectedArr.length; i++) {
+      marker_selectedArr[i].setMap(null);
+    }
+    marker_selectedArr = [];
     markers = [];
   }
 
@@ -442,6 +524,26 @@ function App() {
     }
     markerArr = [];
   }
+
+  function resetLine() {
+    for (let i in resultdrawArr) {
+      resultdrawArr[i].setMap(null);
+    }
+    resultdrawArr = [];
+
+    for (let i in marker_pointsArr) {
+      marker_pointsArr[i].setMap(null);
+    }
+    marker_pointsArr = [];
+
+    for (let i = 0; i < markers.length; i++) {
+      markers[i].setMap(null);
+    }
+    markers = [];
+
+    $("#result").text("");
+  }
+
   function removeAll() {
     removeMarkers();
     removeSearchMarkers();
@@ -467,6 +569,7 @@ function App() {
       }
       marker_selectedArr = [];
     }
+    $("#result").text("");
   }
 
   return (
@@ -480,6 +583,9 @@ function App() {
         ></input>
         <button id="btn_select" className="btn">
           검색
+        </button>
+        <button id="btn_police" className="btn">
+          파출소
         </button>
         <button id="btn_navigate" className="btn">
           안내
@@ -497,7 +603,7 @@ function App() {
           zIndex: 0,
         }}
       />
-      <div id="result" />
+      <div id="result" className="distance" />
     </div>
   );
 }
